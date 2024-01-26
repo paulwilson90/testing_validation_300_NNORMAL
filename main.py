@@ -3,23 +3,23 @@ import re
 from math import radians, sin
 from calcs import get_uld, company_addit_dry_wet, get_wat_limit, final_max_weight, get_v_speeds
 from calcs import slope_corrected, vapp_corrections, wind_correct_formulated, max_landing_wt_lda
-from calcs import abnormal_factor
+from calcs import abnormal_factor, max_brake_energy_wt, get_torque_limits, get_oei_climb
 
 """To auto space the columns in Excel: right click worksheet, view code, dropdown to worksheet and type:"""
 """ Cells.EntireColumn.AutoFit """
 
 """Made change to WAT limit where if flap anything below 15, return max weights as climb should be unrestricted"""
 
-xls = pd.ExcelFile('Q300 Repeat Ice On Landing Non Normal Test Cases.xlsx')
-Q400 = pd.read_excel(xls, 'Sheet1')
+xls = pd.ExcelFile('Q300 Landing Non Normal Version Control Test Cases.xlsx')
+Q400 = pd.read_excel(xls, 'Q300 Non Normal')
 
 all_excel_data = {"Test Case Number": [], "Airport Code": [], "Destination": [], "Runway": [],
                   "Elevation": [], "LDA": [], "Slope": [], "Grooved/Ungrooved": [], "Wind Direction": [],
                   "Wind Speed": [], '"HW (+) / TW (-) Comp"': [], "Temp": [], "QNH": [], "Dry/Wet": [],
                   "Weight": [], "VREF Additive": [], "Flaps": [], "Bleeds": [],
                   "Ice protection": [], "Pressure Altitude": [], "Abnormality": [], "Factor Applied": [],
-                  "MLDW": [], "Unfactored ULD": [], "ULD": [],
-                  "LDR": [], "Vapp": [], "VREF": [], "VREF ICE": []}
+                  "MLDW": [], "NTOP": [], "MTOP": [], "Unfactored ULD": [], "ULD": [],
+                  "LDR": [], "Vapp": [], "VREF": [], "VREF ICE": [], "OEI Gradient": []}
 
 
 def all_data(all_row_data):
@@ -79,13 +79,21 @@ def all_data(all_row_data):
     operation_fact_corrected_ld = company_addit_dry_wet(corrected_for_vapp)
     print(f"After adding the company 15% we get {operation_fact_corrected_ld}")
 
+    ntop, mtop = get_torque_limits(temp, pressure_altitude, vapp, bleeds)
+    print(ntop, mtop, "Torque figures")
+
+    oei_climb_grad = get_oei_climb(temp, elevation, flap, weight)
+    print(oei_climb_grad, "% OEI climb grad")
+
     max_wat_weight, MLDW, off_chart = get_wat_limit(temp, flap, ice, bleeds, pressure_altitude, test_case_number)
     print("BLEEDS", bleeds, "TEMP", temp, "PRESS ALT", pressure_altitude, "Max WAT weight", max_wat_weight, MLDW,
           "MLDW")
 
     max_field_based_wt = max_landing_wt_lda(lda, operation_fact_corrected_ld, flap, weight, final_uld)
 
-    max_weight = final_max_weight(max_wat_weight, max_field_based_wt, MLDW, off_chart)
+    max_brake_nrg_weight = max_brake_energy_wt(flap, temp, elevation, weight, head_tail)
+
+    max_weight = final_max_weight(max_wat_weight, max_field_based_wt, max_brake_nrg_weight, MLDW, off_chart)
     print(max_weight, "MAX WEIGHT")
 
     if head_tail < -20:
@@ -131,6 +139,8 @@ def all_data(all_row_data):
     all_excel_data["Factor Applied"].append(abnormal_multiplier)
 
     all_excel_data["MLDW"].append(max_weight)
+    all_excel_data["NTOP"].append(ntop)
+    all_excel_data["MTOP"].append(mtop)
     all_excel_data["Unfactored ULD"].append(final_uld)
     all_excel_data["ULD"].append(corrected_for_vapp)
     all_excel_data["LDR"].append(operation_fact_corrected_ld)
@@ -138,6 +148,7 @@ def all_data(all_row_data):
     all_excel_data["Vapp"].append(vapp)
     all_excel_data["VREF"].append(vref)
     all_excel_data["VREF ICE"].append(vref_ice)
+    all_excel_data["OEI Gradient"].append(oei_climb_grad)
 
 
 for row_number in range(len(Q400)):
